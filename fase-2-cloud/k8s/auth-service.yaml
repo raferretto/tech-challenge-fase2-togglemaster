@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          image: REPLACE_ME_ECR_URI/auth-service:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8001
+          env:
+            - name: PORT
+              value: "8001"
+            - name: SERVICE_API_KEY_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: togglemaster-config
+                  key: SERVICE_API_KEY_NAME
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: auth-service-secret
+                  key: DATABASE_URL
+            - name: MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: auth-service-secret
+                  key: MASTER_KEY
+            - name: SERVICE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: auth-service-secret
+                  key: SERVICE_API_KEY
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+spec:
+  type: ClusterIP
+  selector:
+    app: auth-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

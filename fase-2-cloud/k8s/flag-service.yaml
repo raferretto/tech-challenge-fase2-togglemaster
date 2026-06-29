@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flag-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: flag-service
+  template:
+    metadata:
+      labels:
+        app: flag-service
+    spec:
+      containers:
+        - name: flag-service
+          image: REPLACE_ME_ECR_URI/flag-service:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8002
+          env:
+            - name: PORT
+              value: "8002"
+            - name: AUTH_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: togglemaster-config
+                  key: AUTH_SERVICE_URL
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: flag-service-secret
+                  key: DATABASE_URL
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flag-service
+spec:
+  type: ClusterIP
+  selector:
+    app: flag-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

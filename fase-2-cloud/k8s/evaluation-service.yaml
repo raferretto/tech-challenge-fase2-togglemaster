@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evaluation-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: evaluation-service
+  template:
+    metadata:
+      labels:
+        app: evaluation-service
+    spec:
+      containers:
+        - name: evaluation-service
+          image: REPLACE_ME_ECR_URI/evaluation-service:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8004
+          env:
+            - name: PORT
+              value: "8004"
+            - name: AWS_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: togglemaster-config
+                  key: AWS_REGION
+            - name: FLAG_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: togglemaster-config
+                  key: FLAG_SERVICE_URL
+            - name: TARGETING_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: togglemaster-config
+                  key: TARGETING_SERVICE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: evaluation-service-secret
+                  key: REDIS_URL
+            - name: AWS_SQS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: evaluation-service-secret
+                  key: AWS_SQS_URL
+            - name: SERVICE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: evaluation-service-secret
+                  key: SERVICE_API_KEY
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 750m
+              memory: 768Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evaluation-service
+spec:
+  type: ClusterIP
+  selector:
+    app: evaluation-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

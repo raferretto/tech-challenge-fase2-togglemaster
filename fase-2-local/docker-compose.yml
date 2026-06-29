@@ -1,0 +1,197 @@
+services:
+  postgres-auth:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: toggle
+      POSTGRES_PASSWORD: toggle
+      POSTGRES_DB: auth_db
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+      - ./auth-service/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U toggle -d auth_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres-app:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: toggle
+      POSTGRES_PASSWORD: toggle
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_app_data:/var/lib/postgresql/data
+      - ./infra/local/postgres-app-init/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U toggle -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb"]
+    ports:
+      - "8000:8000"
+
+  elasticmq:
+    image: softwaremill/elasticmq-native:1.5.7
+    ports:
+      - "9324:9324"
+
+  local-bootstrap:
+    image: amazon/aws-cli:2.15.57
+    depends_on:
+      - elasticmq
+      - dynamodb-local
+    environment:
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+      AWS_SQS_ENDPOINT_URL: http://elasticmq:9324
+      AWS_DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+      AWS_SQS_QUEUE_NAME: togglemaster-evaluation-events
+      AWS_DYNAMODB_TABLE: ToggleMasterAnalytics
+    volumes:
+      - ./scripts/bootstrap-local.sh:/bootstrap-local.sh:ro
+    entrypoint: ["/bin/sh", "/bootstrap-local.sh"]
+    restart: "no"
+
+  auth-service:
+    build:
+      context: ../auth-service
+    environment:
+      PORT: "8001"
+      DATABASE_URL: postgres://toggle:toggle@postgres-auth:5432/auth_db?sslmode=disable
+      MASTER_KEY: admin-secreto-123
+      SERVICE_API_KEY: tm_key_evaluation_local
+      SERVICE_API_KEY_NAME: evaluation-service-key
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  flag-service:
+    build:
+      context: ../flag-service
+    environment:
+      PORT: "8002"
+      DATABASE_URL: postgres://toggle:toggle@postgres-app:5432/flags_db?sslmode=disable
+      AUTH_SERVICE_URL: http://auth-service:8001
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      postgres-app:
+        condition: service_healthy
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8002/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  targeting-service:
+    build:
+      context: ../targeting-service
+    environment:
+      PORT: "8003"
+      DATABASE_URL: postgres://toggle:toggle@postgres-app:5432/targeting_db?sslmode=disable
+      AUTH_SERVICE_URL: http://auth-service:8001
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      postgres-app:
+        condition: service_healthy
+    ports:
+      - "8003:8003"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8003/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  evaluation-service:
+    build:
+      context: ../evaluation-service
+    environment:
+      PORT: "8004"
+      REDIS_URL: redis://redis:6379/0
+      FLAG_SERVICE_URL: http://flag-service:8002
+      TARGETING_SERVICE_URL: http://targeting-service:8003
+      SERVICE_API_KEY: tm_key_evaluation_local
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+      AWS_SQS_URL: http://elasticmq:9324/queue/togglemaster-evaluation-events
+      AWS_SQS_ENDPOINT_URL: http://elasticmq:9324
+    depends_on:
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      flag-service:
+        condition: service_healthy
+      targeting-service:
+        condition: service_healthy
+      local-bootstrap:
+        condition: service_completed_successfully
+    ports:
+      - "8004:8004"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8004/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  analytics-service:
+    build:
+      context: ../analytics-service
+    environment:
+      PORT: "8005"
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+      AWS_SQS_URL: http://elasticmq:9324/queue/togglemaster-evaluation-events
+      AWS_SQS_ENDPOINT_URL: http://elasticmq:9324
+      AWS_DYNAMODB_TABLE: ToggleMasterAnalytics
+      AWS_DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+    depends_on:
+      local-bootstrap:
+        condition: service_completed_successfully
+    ports:
+      - "8005:8005"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8005/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres_auth_data:
+  postgres_app_data:
+  redis_data:

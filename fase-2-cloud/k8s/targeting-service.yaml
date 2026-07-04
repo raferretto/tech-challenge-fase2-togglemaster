@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: targeting-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: targeting-service
@@ -32,6 +32,11 @@ spec:
                 secretKeyRef:
                   name: targeting-service-secret
                   key: DATABASE_URL
+            - name: SERVICE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: targeting-service-secret
+                  key: SERVICE_API_KEY
           readinessProbe:
             httpGet:
               path: /health
@@ -50,11 +55,11 @@ spec:
             failureThreshold: 3
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 10m
+              memory: 32Mi
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 200m
+              memory: 256Mi
 ---
 apiVersion: v1
 kind: Service

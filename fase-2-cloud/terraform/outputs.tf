@@ -59,17 +59,17 @@ output "sqs_queue_url" {
 }
 
 output "auth_service_database_url_b64" {
-  value     = base64encode("postgres://${var.rds_master_username}:${random_password.rds_master.result}@${aws_db_instance.this["auth"].address}:5432/auth_db?sslmode=disable")
+  value     = base64encode("postgres://${var.rds_master_username}:${random_password.rds_master.result}@${aws_db_instance.this["auth"].address}:5432/auth_db?sslmode=require")
   sensitive = true
 }
 
 output "flag_service_database_url_b64" {
-  value     = base64encode("postgres://${var.rds_master_username}:${random_password.rds_master.result}@${aws_db_instance.this["flags"].address}:5432/flags_db?sslmode=disable")
+  value     = base64encode("postgres://${var.rds_master_username}:${random_password.rds_master.result}@${aws_db_instance.this["flags"].address}:5432/flags_db?sslmode=require")
   sensitive = true
 }
 
 output "targeting_service_database_url_b64" {
-  value     = base64encode("postgres://${var.rds_master_username}:${random_password.rds_master.result}@${aws_db_instance.this["targeting"].address}:5432/targeting_db?sslmode=disable")
+  value     = base64encode("postgres://${var.rds_master_username}:${random_password.rds_master.result}@${aws_db_instance.this["targeting"].address}:5432/targeting_db?sslmode=require")
   sensitive = true
 }
 
@@ -106,4 +106,16 @@ output "service_api_key_b64" {
 output "service_api_key" {
   value     = random_password.service_api_key.result
   sensitive = true
+}
+
+output "kubeconfig_command" {
+  value = "aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.this.name}"
+}
+
+output "keda_sqs_role_arn" {
+  value = aws_iam_role.keda_sqs.arn
+}
+
+output "nginx_ingress_role_arn" {
+  value = aws_iam_role.nginx_ingress.arn
 }

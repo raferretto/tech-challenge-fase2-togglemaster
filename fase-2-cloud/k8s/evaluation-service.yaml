@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: evaluation-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: evaluation-service
@@ -70,11 +70,11 @@ spec:
             failureThreshold: 3
           resources:
             requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
               cpu: 200m
               memory: 256Mi
-            limits:
-              cpu: 750m
-              memory: 768Mi
 ---
 apiVersion: v1
 kind: Service

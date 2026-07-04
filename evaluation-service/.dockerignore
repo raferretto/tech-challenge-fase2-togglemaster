@@ -1,3 +1,10 @@
 .git
 .env
-README.md
+.idea
+.vscode
+*.md
+tests/
+*_test.go
+coverage.out
+__pycache__
+*.pyc

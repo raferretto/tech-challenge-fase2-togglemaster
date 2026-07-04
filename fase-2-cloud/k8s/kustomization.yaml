@@ -6,7 +6,6 @@ namespace: togglemaster
 resources:
   - namespace.yaml
   - configmap.yaml
-  - secrets.yaml
   - auth-service.yaml
   - flag-service.yaml
   - targeting-service.yaml
@@ -17,3 +16,28 @@ resources:
 
 commonLabels:
   app.kubernetes.io/part-of: togglemaster
+
+commonAnnotations:
+  instrumentation.opentelemetry.io/inject-java: "false"
+  instrumentation.opentelemetry.io/inject-nodejs: "false"
+  instrumentation.opentelemetry.io/inject-python: "false"
+  instrumentation.opentelemetry.io/inject-dotnet: "false"
+
+
+
+images:
+  - name: REPLACE_ME_ECR_URI/auth-service
+    newName: 889629667863.dkr.ecr.us-east-1.amazonaws.com/auth-service
+    newTag: latest
+  - name: REPLACE_ME_ECR_URI/flag-service
+    newName: 889629667863.dkr.ecr.us-east-1.amazonaws.com/flag-service
+    newTag: latest
+  - name: REPLACE_ME_ECR_URI/targeting-service
+    newName: 889629667863.dkr.ecr.us-east-1.amazonaws.com/targeting-service
+    newTag: latest
+  - name: REPLACE_ME_ECR_URI/evaluation-service
+    newName: 889629667863.dkr.ecr.us-east-1.amazonaws.com/evaluation-service
+    newTag: latest
+  - name: REPLACE_ME_ECR_URI/analytics-service
+    newName: 889629667863.dkr.ecr.us-east-1.amazonaws.com/analytics-service
+    newTag: latest

@@ -197,6 +197,28 @@ resource "aws_eks_cluster" "this" {
   })
 }
 
+resource "aws_launch_template" "eks_ng" {
+  name_prefix = "${var.cluster_name}-ng-"
+  
+  user_data = base64encode(<<-EOF
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUNDARY"
+
+--BOUNDARY
+Content-Type: application/node.eks.aws
+
+---
+apiVersion: node.eks.aws/v1alpha1
+kind: NodeConfig
+spec:
+  kubelet:
+    config:
+      maxPods: 110
+--BOUNDARY--
+EOF
+  )
+}
+
 resource "aws_eks_node_group" "this" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "${var.cluster_name}-managed-ng"
@@ -204,7 +226,12 @@ resource "aws_eks_node_group" "this" {
   subnet_ids      = [for subnet in aws_subnet.private : subnet.id]
   instance_types  = [var.node_instance_type]
   capacity_type   = "ON_DEMAND"
-  ami_type        = "AL2_x86_64"
+  ami_type        = "AL2023_x86_64_STANDARD"
+
+  launch_template {
+    id      = aws_launch_template.eks_ng.id
+    version = aws_launch_template.eks_ng.latest_version
+  }
 
   scaling_config {
     desired_size = var.node_desired_size
@@ -392,10 +419,23 @@ resource "aws_dynamodb_table" "analytics" {
   })
 }
 
+resource "aws_sqs_queue" "events_dlq" {
+  name = "togglemaster-evaluation-events-dlq"
+
+  tags = merge(local.tags, {
+    Name = "togglemaster-evaluation-events-dlq"
+  })
+}
+
 resource "aws_sqs_queue" "events" {
   name = "togglemaster-evaluation-events"
 
   visibility_timeout_seconds = 60
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.events_dlq.arn
+    maxReceiveCount     = 5
+  })
 
   tags = merge(local.tags, {
     Name = "togglemaster-evaluation-events"

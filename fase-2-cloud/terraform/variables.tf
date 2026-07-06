@@ -43,7 +43,7 @@ variable "cluster_public_access_cidrs" {
 variable "node_instance_type" {
   description = "Instance type used by the managed node group."
   type        = string
-  default     = "t3.micro"
+  default     = "t3.small"
 }
 
 variable "node_min_size" {
@@ -55,7 +55,7 @@ variable "node_min_size" {
 variable "node_desired_size" {
   description = "Desired number of worker nodes."
   type        = number
-  default     = 3
+  default     = 4
 }
 
 variable "node_max_size" {

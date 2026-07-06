@@ -213,7 +213,7 @@ kind: NodeConfig
 spec:
   kubelet:
     config:
-      maxPods: 110
+      maxPods: 11
 --BOUNDARY--
 EOF
   )

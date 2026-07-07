@@ -33,6 +33,7 @@ commonAnnotations:
 
 
 
+
 images:
   - name: REPLACE_ME_ECR_URI/auth-service
     newName: 889629667863.dkr.ecr.us-east-1.amazonaws.com/auth-service

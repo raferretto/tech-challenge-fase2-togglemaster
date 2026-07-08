@@ -241,18 +241,10 @@ Invoke-RestMethod -Uri http://localhost:8004/health
 
 `GET /evaluate?user_id=...&flag_name=...`
 - Calcula a decisão final da flag para o usuário.
-- Exemplo básico:
+- Exemplo:
 
 ```powershell
 Invoke-RestMethod -Uri "http://localhost:8004/evaluate?user_id=user-123&flag_name=enable-new-dashboard"
-```
-
-- Exemplo testando a distribuição matemática (A/B testing):
-Simule a chamada para dois IDs de usuário distintos para observar a diferença no retorno com base na regra de porcentagem:
-
-```bash
-curl "http://localhost:8004/evaluate?user_id=user-xyz-1&flag_name=enable-new-dashboard"
-curl "http://localhost:8004/evaluate?user_id=user-abc-9&flag_name=enable-new-dashboard"
 ```
 
 - O fluxo interno faz:

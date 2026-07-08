@@ -30,12 +30,10 @@ eval $KUBECONFIG_CMD
 
 echo "4. Generating Kubernetes Secrets from Terraform Outputs..."
 
-# Function to safely get base64 terraform outputs and decode them
 get_tf_b64_output() {
   terraform output -raw $1 | base64 --decode
 }
 
-# Create k8s directory for auto-generated secrets if it doesn't exist
 mkdir -p ../k8s/generated
 
 cat <<EOF > ../k8s/generated/secrets.yaml
@@ -140,17 +138,14 @@ EOF
 
 echo "6. Applying Kubernetes Manifests..."
 
-# Configure ECR images in kustomize
 ACCOUNT_ID=$(terraform output -raw account_id)
 REGION=$(terraform output -raw aws_region)
 ECR_BASE="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 
 echo "Updating Kustomize with ECR URIs..."
 cd ../k8s
-# Remove existing images block if it exists
 sed -i '/^images:/,$d' kustomization.yaml
 
-# This edits kustomization.yaml to replace REPLACE_ME_ECR_URI with actual ECR urls
 cat <<EOF >> kustomization.yaml
 
 images:

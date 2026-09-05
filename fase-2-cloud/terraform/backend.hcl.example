@@ -1,0 +1,6 @@
+bucket        = "togglemaster-terraform-state"
+key           = "phase3/terraform.tfstate"
+region        = "us-east-1"
+dynamodb_table = "togglemaster-terraform-locks"
+encrypt       = true
+use_lockfile  = true

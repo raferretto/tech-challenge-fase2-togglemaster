@@ -88,6 +88,23 @@ variable "service_api_key_name" {
   default     = "evaluation-service-key"
 }
 
+variable "iam_mode" {
+  description = "IAM mode used by EKS and node groups. Allowed values: personal, academy."
+  type        = string
+  default     = "personal"
+
+  validation {
+    condition     = contains(["personal", "academy"], var.iam_mode)
+    error_message = "iam_mode must be either personal or academy."
+  }
+}
+
+variable "academy_lab_role_name" {
+  description = "Existing IAM role name used in AWS Academy."
+  type        = string
+  default     = "LabRole"
+}
+
 variable "tags" {
   description = "Additional tags applied to all resources."
   type        = map(string)

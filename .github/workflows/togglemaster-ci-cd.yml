@@ -1,0 +1,228 @@
+name: ToggleMaster CI/CD
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "auth-service/**"
+      - "flag-service/**"
+      - "targeting-service/**"
+      - "evaluation-service/**"
+      - "analytics-service/**"
+      - ".github/workflows/togglemaster-ci-cd.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "auth-service/**"
+      - "flag-service/**"
+      - "targeting-service/**"
+      - "evaluation-service/**"
+      - "analytics-service/**"
+      - ".github/workflows/togglemaster-ci-cd.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: togglemaster-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Detect changed services
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            auth:
+              - 'auth-service/**'
+            flag:
+              - 'flag-service/**'
+            targeting:
+              - 'targeting-service/**'
+            evaluation:
+              - 'evaluation-service/**'
+            analytics:
+              - 'analytics-service/**'
+            pipeline:
+              - '.github/workflows/togglemaster-ci-cd.yml'
+
+      - name: Build service matrix
+        id: matrix
+        env:
+          CHANGES: ${{ steps.filter.outputs.changes }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          matrix='{"include":[]}'
+
+          add_service() {
+            local service="$1"
+            local path="$2"
+            local language="$3"
+            matrix="$(jq --arg service "$service" --arg path "$path" --arg language "$language" \
+              '.include += [{service: $service, path: $path, language: $language}]' <<< "$matrix")"
+          }
+
+          add_if_changed() {
+            local filter="$1"
+            local service="$2"
+            local path="$3"
+            local language="$4"
+            if [[ "$EVENT_NAME" == "workflow_dispatch" ]] || jq -e --arg filter "$filter" '. | index($filter)' <<< "$CHANGES" > /dev/null; then
+              add_service "$service" "$path" "$language"
+            fi
+          }
+
+          if jq -e '. | index("pipeline")' <<< "$CHANGES" > /dev/null; then
+            EVENT_NAME="workflow_dispatch"
+          fi
+
+          add_if_changed auth auth-service auth-service go
+          add_if_changed flag flag-service flag-service python
+          add_if_changed targeting targeting-service targeting-service python
+          add_if_changed evaluation evaluation-service evaluation-service go
+          add_if_changed analytics analytics-service analytics-service python
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  service-pipeline:
+    name: ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: changes
+    concurrency:
+      group: togglemaster-gitops-${{ github.ref }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.path }}
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+      LOCAL_IMAGE: togglemaster/${{ matrix.service }}:${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache: true
+
+      - name: Set up Python
+        if: matrix.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ${{ matrix.path }}/requirements.txt
+
+      - name: Install Go security tools
+        if: matrix.language == 'go'
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.21.4
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Install Python quality tools
+        if: matrix.language == 'python'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install bandit pytest ruff
+
+      - name: Build and test Go service
+        if: matrix.language == 'go'
+        run: |
+          go test ./...
+          go vet ./...
+
+      - name: Build and test Python service
+        if: matrix.language == 'python'
+        run: |
+          python -m compileall .
+          if find . -type f \( -name "test_*.py" -o -name "*_test.py" \) | grep -q .; then
+            pytest
+          else
+            echo "No Python unit tests found; skipping pytest."
+          fi
+
+      - name: Lint Python service
+        if: matrix.language == 'python'
+        run: ruff check .
+
+      - name: Static analysis for Go
+        if: matrix.language == 'go'
+        run: gosec ./...
+
+      - name: Static analysis for Python
+        if: matrix.language == 'python'
+        run: bandit -r .
+
+      - name: SCA scan with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          severity: CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
+
+      - name: Build container image
+        run: docker build -t "$LOCAL_IMAGE" .
+
+      - name: Scan container image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          format: table
+          severity: CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
+
+      - name: Configure AWS credentials
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push image to Amazon ECR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          REMOTE_IMAGE="${ECR_REGISTRY}/${{ matrix.service }}:${GITHUB_SHA}"
+          docker tag "$LOCAL_IMAGE" "$REMOTE_IMAGE"
+          docker push "$REMOTE_IMAGE"
+
+      - name: Update GitOps image reference
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: ${{ github.workspace }}
+        run: |
+          ./scripts/update-gitops-image.ps1 -Service "${{ matrix.service }}" -Tag "$GITHUB_SHA"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gitops/togglemaster/kustomization.yaml
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(gitops): promote ${{ matrix.service }} to ${GITHUB_SHA}"
+          git push

@@ -13,4 +13,6 @@ rds_master_username     = "toggle"
 redis_node_type         = "cache.t3.micro"
 service_api_key_name    = "evaluation-service-key"
 cluster_public_access_cidrs = ["0.0.0.0/0"]
+iam_mode                = "personal"
+academy_lab_role_name   = "LabRole"
 

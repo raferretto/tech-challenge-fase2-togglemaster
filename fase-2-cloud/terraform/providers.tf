@@ -12,6 +12,11 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+data "aws_iam_role" "academy_lab_role" {
+  count = var.iam_mode == "academy" ? 1 : 0
+  name  = var.academy_lab_role_name
+}
+
 data "aws_eks_cluster_auth" "cluster" {
   name = aws_eks_cluster.this.name
 }

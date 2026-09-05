@@ -25,6 +25,11 @@ locals {
     "kubernetes.io/role/internal-elb" = "1"
   })
 
+  is_academy = var.iam_mode == "academy"
+
+  eks_cluster_role_arn = local.is_academy ? data.aws_iam_role.academy_lab_role[0].arn : aws_iam_role.eks_cluster[0].arn
+  eks_node_role_arn    = local.is_academy ? data.aws_iam_role.academy_lab_role[0].arn : aws_iam_role.eks_nodes[0].arn
+
   ecr_repositories = toset([
     "auth-service",
     "flag-service",

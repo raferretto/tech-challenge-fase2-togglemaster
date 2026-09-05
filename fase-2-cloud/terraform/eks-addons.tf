@@ -19,7 +19,7 @@ resource "helm_release" "metrics_server" {
     name  = "args[0]"
     value = "--kubelet-insecure-tls"
   }
-  wait       = false
+  wait = false
 
   depends_on = [aws_eks_node_group.this]
 }
@@ -72,7 +72,7 @@ resource "helm_release" "ingress_nginx" {
     value = "false"
   }
 
-  wait             = false
+  wait = false
 
   depends_on = [aws_eks_node_group.this, aws_iam_role.nginx_ingress]
 }
@@ -128,7 +128,7 @@ resource "helm_release" "keda" {
   namespace        = "keda"
   create_namespace = true
 
-  wait             = false
+  wait = false
 
   depends_on = [aws_eks_node_group.this]
 }
